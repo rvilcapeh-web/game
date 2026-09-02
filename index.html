@@ -2,50 +2,94 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Juego de Carros</title>
     <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
         body {
             margin: 0;
-            background-color: #222;
+            padding: 0;
+            background-color: #111;
             color: #fff;
-            font-family: sans-serif;
+            font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            height: 100vh;
+            align-items: center;
+            min-height: 100vh;
             overflow: hidden;
         }
         #game-container {
             position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 100vw;
+            max-height: 80vh;
         }
         canvas {
-            border: 4px solid #fff;
-            background-color: #555;
+            border: 3px solid #fff;
+            background-color: #444;
             display: block;
+            max-width: 90vw;
+            max-height: 70vh;
+            aspect-ratio: 2 / 3;
         }
         #ui {
             position: absolute;
             top: 10px;
-            left: 10px;
-            font-size: 20px;
+            left: 20px;
+            font-size: 18px;
             font-weight: bold;
-            text-shadow: 1px 1px 2px #000;
+            color: #fff;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 5;
         }
         #game-over {
             display: none;
             position: absolute;
-            top: 50%;
+            top: 40%;
             left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 20px 30px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
             border-radius: 10px;
             border: 2px solid #fff;
+            width: 80%;
+            max-width: 300px;
+            z-index: 10;
         }
-        button {
+        /* Controles Táctiles para Celular / Tablet */
+        #touch-controls {
+            display: flex;
+            justify-content: space-between;
+            width: 90vw;
+            max-width: 400px;
+            margin-top: 10px;
+            gap: 20px;
+        }
+        .btn-touch {
+            flex: 1;
+            padding: 18px;
+            font-size: 22px;
+            font-weight: bold;
+            background-color: #333;
+            color: white;
+            border: 2px solid #666;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .btn-touch:active {
+            background-color: #555;
+        }
+        button.restart-btn {
             padding: 10px 20px;
             font-size: 16px;
             font-weight: bold;
@@ -54,10 +98,7 @@
             color: white;
             border: none;
             border-radius: 5px;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: #218838;
+            margin-top: 15px;
         }
     </style>
 </head>
@@ -67,10 +108,16 @@
     <canvas id="gameCanvas" width="400" height="600"></canvas>
     <div id="ui">Puntos: <span id="score">0</span></div>
     <div id="game-over">
-        <h1>¡Juego Terminado!</h1>
+        <h2 style="margin-top:0;">¡Juego Terminado!</h2>
         <p>Puntuación final: <span id="final-score">0</span></p>
-        <button onclick="resetGame()">Jugar de nuevo</button>
+        <button class="restart-btn" onclick="resetGame()">Jugar de nuevo</button>
     </div>
+</div>
+
+<!-- Botones visibles en Móviles y Tablets -->
+<div id="touch-controls">
+    <div class="btn-touch" id="btn-left">◄ IZQ</div>
+    <div class="btn-touch" id="btn-right">DER ►</div>
 </div>
 
 <script>
@@ -80,23 +127,17 @@
     const finalScoreElement = document.getElementById("final-score");
     const gameOverScreen = document.getElementById("game-over");
 
-    // Configuración del jugador (auto)
     const car = {
         x: 180,
         y: 500,
         width: 40,
         height: 70,
-        speed: 5,
+        speed: 6,
         color: "#e74c3c"
     };
 
-    // Controles
-    const keys = {
-        ArrowLeft: false,
-        ArrowRight: false
-    };
+    const keys = { ArrowLeft: false, ArrowRight: false };
 
-    // Variables del juego
     let obstacles = [];
     let score = 0;
     let obstacleTimer = 0;
@@ -104,50 +145,64 @@
     let isGameOver = false;
     let roadOffsetY = 0;
 
-    // Escuchar teclas
+    // --- CONTROLES DE TECLADO (PC) ---
     window.addEventListener("keydown", (e) => {
-        if (e.key in keys) keys[e.key] = true;
+        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+            e.preventDefault();
+        }
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.ArrowLeft = true;
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.ArrowRight = true;
     });
 
     window.addEventListener("keyup", (e) => {
-        if (e.key in keys) keys[e.key] = false;
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.ArrowLeft = false;
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.ArrowRight = false;
     });
+
+    // --- CONTROLES TÁCTILES (CELULAR Y TABLET) ---
+    const btnLeft = document.getElementById("btn-left");
+    const btnRight = document.getElementById("btn-right");
+
+    const addTouchEvents = (element, keyName) => {
+        element.addEventListener("touchstart", (e) => { e.preventDefault(); keys[keyName] = true; });
+        element.addEventListener("touchend", (e) => { e.preventDefault(); keys[keyName] = false; });
+        element.addEventListener("mousedown", () => { keys[keyName] = true; });
+        element.addEventListener("mouseup", () => { keys[keyName] = false; });
+    };
+
+    addTouchEvents(btnLeft, "ArrowLeft");
+    addTouchEvents(btnRight, "ArrowRight");
 
     function spawnObstacle() {
         const width = 40;
         const height = 70;
-        // Posición aleatoria dentro de los límites de la carretera
-        const x = Math.random() * (canvas.width - width - 40) + 20;
+        const x = Math.random() * (canvas.width - width - 60) + 30;
         obstacles.push({ x, y: -height, width, height, color: "#3498db" });
     }
 
     function update() {
         if (isGameOver) return;
 
-        // Movimiento del jugador
-        if (keys.ArrowLeft && car.x > 20) {
+        if (keys.ArrowLeft && car.x > 25) {
             car.x -= car.speed;
         }
-        if (keys.ArrowRight && car.x < canvas.width - car.width - 20) {
+        if (keys.ArrowRight && car.x < canvas.width - car.width - 25) {
             car.x += car.speed;
         }
 
-        // Movimiento del fondo (línea central)
         roadOffsetY = (roadOffsetY + obstacleSpeed) % 40;
 
-        // Generar obstáculos
         obstacleTimer++;
-        if (obstacleTimer > 60) {
+        if (obstacleTimer > 55) {
             spawnObstacle();
             obstacleTimer = 0;
         }
 
-        // Mover obstáculos y detectar colisiones
         for (let i = 0; i < obstacles.length; i++) {
             let obs = obstacles[i];
             obs.y += obstacleSpeed;
 
-            // Detección de colisión (AABB)
+            // Detección de colisión
             if (
                 car.x < obs.x + obs.width &&
                 car.x + car.width > obs.x &&
@@ -157,14 +212,12 @@
                 endGame();
             }
 
-            // Eliminar obstáculos fuera de pantalla y aumentar puntos
             if (obs.y > canvas.height) {
                 obstacles.splice(i, 1);
                 i--;
                 score += 10;
                 scoreElement.innerText = score;
 
-                // Aumentar la dificultad gradualmente
                 if (score % 50 === 0) {
                     obstacleSpeed += 0.5;
                 }
@@ -173,15 +226,14 @@
     }
 
     function draw() {
-        // Limpiar canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Dibujar bordes de la carretera
+        // Bordes de la carretera
         ctx.fillStyle = "#e67e22";
         ctx.fillRect(0, 0, 20, canvas.height);
         ctx.fillRect(canvas.width - 20, 0, 20, canvas.height);
 
-        // Dibujar líneas discontinuas del centro
+        // Línea central discontinua
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 6;
         ctx.setLineDash([20, 20]);
@@ -191,11 +243,11 @@
         ctx.lineTo(canvas.width / 2, canvas.height);
         ctx.stroke();
 
-        // Dibujar auto del jugador
+        // Auto del jugador
         ctx.fillStyle = car.color;
         ctx.fillRect(car.x, car.y, car.width, car.height);
 
-        // Dibujar obstáculos
+        // Obstáculos
         for (let obs of obstacles) {
             ctx.fillStyle = obs.color;
             ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
@@ -228,7 +280,6 @@
         gameLoop();
     }
 
-    // Iniciar juego
     gameLoop();
 </script>
 
